@@ -58,7 +58,12 @@ class FakeProvider:
     def offset_hours(self) -> float:
         return 0.0
 
-    def refresh_offset(self) -> None:
+    stale_note = None
+
+    def calendar(self):
+        return None
+
+    def refresh(self) -> None:
         pass
 
     def account(self) -> AccountInfo:

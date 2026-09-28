@@ -7,16 +7,18 @@ from typing import Protocol
 from .calendar import load_events
 from .config import Settings
 from .metrics import evaluate
-from .models import AccountInfo, InstrumentResult, MarketData, ScanResult, SymbolSpec
+from .models import AccountInfo, EconEvent, InstrumentResult, MarketData, ScanResult, SymbolSpec
 from .sessions import session_label
 
 
 class Provider(Protocol):
     offset_note: str
+    stale_note: str | None  # set when the data source itself is known to be stale
 
     @property
     def offset_hours(self) -> float: ...
-    def refresh_offset(self) -> None: ...
+    def refresh(self) -> None: ...
+    def calendar(self) -> tuple[list[EconEvent], str] | None: ...
     def account(self) -> AccountInfo: ...
     def symbols(self) -> list[SymbolSpec]: ...
     def resolve(self, name: str) -> str | None: ...
@@ -31,7 +33,7 @@ class Scanner:
 
     def run(self, command: str, asset_class: str | None = None,
             only: list[str] | None = None, progress=None) -> ScanResult:
-        self.p.refresh_offset()
+        self.p.refresh()
         specs = self.p.symbols()
         if only is not None:
             wanted = set(only)
@@ -39,7 +41,7 @@ class Scanner:
         elif asset_class:
             specs = [sp for sp in specs if sp.asset_class == asset_class]
 
-        events, cal_status = load_events(self.s)
+        events, cal_status = self.p.calendar() or load_events(self.s)
         results: list[InstrumentResult] = []
         for n, spec in enumerate(specs, 1):
             if progress:
@@ -54,7 +56,8 @@ class Scanner:
             command=command, analysis_time_utc=now, account=self.p.account(),
             server_utc_offset_hours=self.p.offset_hours, active_sessions=[session_label(now)],
             calendar_status=cal_status, upcoming_events=upcoming, results=results,
-            universe_size=len(specs),
+            universe_size=len(specs), source=f"{type(self.p).__name__}; server time: {self.p.offset_note}",
+            warnings=[self.p.stale_note] if self.p.stale_note else [],
         )
 
     def resolve_all(self, names: list[str]) -> tuple[list[str], list[str]]:

@@ -1,5 +1,9 @@
 import sys
 
-from .cli import main
+if sys.version_info < (3, 11):
+    sys.exit("scalpscan требует Python 3.11+ (на macOS: python.org или `brew install python`), "
+             f"сейчас {sys.version.split()[0]}")
+
+from .cli import main  # noqa: E402
 
 sys.exit(main())

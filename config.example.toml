@@ -5,8 +5,14 @@ deposit = 30.0
 risk_per_trade_pct = 2.0          # сколько % депозита готовы потерять на одном стопе
 # MT5 API НЕ отдаёт комиссию — укажите её вручную (за 1.0 лот за сторону, в валюте счёта).
 # Bybit CFD Zero-Fee -> 0. Проверьте в спецификации контракта вашего типа счёта.
+# Tight-Spread режим: по материалам Bybit для Forex/Metals фиксированная комиссия ~$6 за лот —
+# уточните в спецификации, за сторону это или за круг, и впишите сюда значение ЗА СТОРОНУ.
 commission_per_lot_side = 0.0
 commission_overrides = { }        # например { "US500.s" = 0.5 }
+
+[source]
+source = "auto"                   # auto: Windows -> MT5 Python API, macOS/Linux -> snapshot file
+snapshot_path = ""                # пусто = найти snapshot.json советника ScalpScanExporter автоматически
 
 [mt5]
 # Пусто = подключиться к уже запущенному и авторизованному терминалу.

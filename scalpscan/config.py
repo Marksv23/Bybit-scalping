@@ -16,6 +16,10 @@ class Settings:
     commission_per_lot_side: float = 0.0
     commission_overrides: dict[str, float] = field(default_factory=dict)  # symbol -> per lot per side
 
+    # --- data source: "auto" (MT5 Python API on Windows, else snapshot file), "mt5" or "file" ---
+    source: str = "auto"
+    snapshot_path: str = ""  # ScalpScanExporter snapshot.json; empty = auto-discover
+
     # --- MT5 connection (empty = attach to the running, logged-in terminal) ---
     mt5_path: str = ""
     mt5_login: int = 0

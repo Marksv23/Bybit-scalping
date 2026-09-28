@@ -105,21 +105,38 @@ def _progress(n: int, total: int, symbol: str) -> None:
     print(f"\r  fetching {n}/{total} {symbol:<20}", end="" if n < total else "\n", file=sys.stderr, flush=True)
 
 
+def make_provider(settings: Settings):
+    from .provider_file import FileProvider
+    from .provider_mt5 import MT5Provider
+
+    source = settings.source
+    if source == "auto":
+        source = "file" if settings.snapshot_path or sys.platform != "win32" else "mt5"
+    return FileProvider(settings) if source == "file" else MT5Provider(settings)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="scalpscan", description="Bybit CFD scalping efficiency scanner (MT5)")
     ap.add_argument("command", nargs="*", help="e.g. SCAN, SCAN FOREX, COMPARE USOUSD.s AUDJPY.s, WHY XAUUSD.s")
     ap.add_argument("--config", help="path to config.toml (default: ./config.toml if present)")
     ap.add_argument("--save", metavar="DIR", help="also save every report as Markdown into DIR")
+    ap.add_argument("--source", choices=["auto", "mt5", "file"],
+                    help="mt5 = MetaTrader5 Python API (Windows); file = ScalpScanExporter snapshot (macOS/Linux)")
+    ap.add_argument("--snapshot", metavar="PATH", help="path to snapshot.json written by ScalpScanExporter")
     args = ap.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     settings = Settings.load(args.config)
+    if args.source:
+        settings.source = args.source
+    if args.snapshot:
+        settings.snapshot_path = args.snapshot
 
-    from .provider_mt5 import MT5Provider, ProviderError
+    from .provider_mt5 import ProviderError
 
     try:
-        provider = MT5Provider(settings)
+        provider = make_provider(settings)
         provider.connect()
     except ProviderError as exc:
         print(f"LIVE DATA UNAVAILABLE: {exc}", file=sys.stderr)

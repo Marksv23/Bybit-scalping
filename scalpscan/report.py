@@ -77,6 +77,8 @@ def header(res: ScanResult, s: Settings) -> list[str]:
     else:
         out.append("`Data freshness: LIVE DATA UNAVAILABLE`")
     out.append("")
+    for w in res.warnings:
+        out += [f"> **LIVE DATA UNAVAILABLE** — {w}", ""]
     if res.results and not live:
         out += ["> **LIVE DATA UNAVAILABLE** — ни по одному инструменту нет свежей котировки "
                 "(рынок закрыт или терминал не получает данные). Рейтинг не строится.", ""]
@@ -84,7 +86,7 @@ def header(res: ScanResult, s: Settings) -> list[str]:
     if a:
         out.append(f"- Source: MetaTrader 5 live feed · {a.company} · server `{a.server}` · "
                    f"{a.mode} · account currency {a.currency} · leverage 1:{a.leverage} · "
-                   f"server time UTC{res.server_utc_offset_hours:+g}h")
+                   f"server time UTC{res.server_utc_offset_hours:+g}h ({res.source})")
         if a.currency != "USD":
             out.append(f"- ⚠ Валюта счёта {a.currency}: все денежные значения в {a.currency}, депозит "
                        f"из конфига ({s.deposit:g}) трактуется в той же валюте.")

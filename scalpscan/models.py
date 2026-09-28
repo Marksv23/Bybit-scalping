@@ -174,6 +174,8 @@ class ScanResult:
     upcoming_events: list[EconEvent]
     results: list[InstrumentResult]
     universe_size: int
+    source: str = ""
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def ranked(self) -> list[InstrumentResult]:

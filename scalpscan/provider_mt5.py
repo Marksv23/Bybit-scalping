@@ -52,12 +52,12 @@ class MT5Provider:
             raise ProviderError(f"MT5 initialize() failed: {self.mt5.last_error()}")
         if self.mt5.account_info() is None:
             raise ProviderError("MT5 запущен, но аккаунт не авторизован (account_info() = None)")
-        self.refresh_offset()
+        self.refresh()
 
     def shutdown(self) -> None:
         self.mt5.shutdown()
 
-    def refresh_offset(self) -> None:
+    def refresh(self) -> None:
         """MT5 timestamps are broker server time. Detect its UTC offset from the freshest quote."""
         if self.s.server_utc_offset_hours is not None:
             self.offset_sec = float(self.s.server_utc_offset_hours) * 3600
@@ -77,6 +77,11 @@ class MT5Provider:
             self.offset_sec = 0.0
             self.offset_note = (f"auto-detect failed ({raw_h:+.1f} h, market likely closed) — assumed 0; "
                                 "set server_utc_offset_hours in config.toml")
+
+    stale_note = None
+
+    def calendar(self):
+        return None  # the Python API has no calendar access -> ForexFactory feed is used
 
     @property
     def offset_hours(self) -> float:
