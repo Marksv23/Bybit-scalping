@@ -105,7 +105,7 @@ EOF
 
 if [ "$RUN" = 1 ]; then
   say "Жду snapshot.json от советника (до 3 минут)…"
-  for _ in $(seq 1 90); do
+  for _ in $(seq 1 ${MT5_WAIT_LOOPS:-90}); do
     snap="$(find "$SUPPORT" -maxdepth 12 -path '*scalpscan/snapshot.json' -mmin -2 2>/dev/null | head -n 1)"
     if [ -n "$snap" ]; then
       ok "найден $snap"
@@ -113,6 +113,17 @@ if [ "$RUN" = 1 ]; then
     fi
     sleep 2
   done
-  warn "snapshot.json не появился. Проверьте, что советник прикреплён к графику, и запустите:"
+  warn "snapshot.json не появился за 3 минуты. Диагностика:"
+  ex5="$(find "$SUPPORT" -maxdepth 12 -name 'ScalpScanExporter.ex5' 2>/dev/null | head -n 1)"
+  if [ -n "$ex5" ]; then ok "советник скомпилирован: $ex5"; else warn "ScalpScanExporter.ex5 не найден — советник не скомпилирован (MT5 → IDE → Compile)"; fi
+  old="$(find "$SUPPORT" -maxdepth 12 -path '*scalpscan/snapshot.json' 2>/dev/null | head -n 1)"
+  if [ -n "$old" ]; then
+    warn "есть старый snapshot (обновлён $(date -r "$old" '+%H:%M:%S')): $old"
+    warn "значит советник запускался, но сейчас не пишет — проверьте, что он на графике и MT5 подключён"
+  else
+    warn "snapshot.json не создавался ни разу — советник не запущен на графике"
+  fi
+  warn "В MT5 откройте Toolbox (Ctrl+T) → вкладка Experts и пришлите последние строки оттуда."
+  warn "Когда советник заработает, запустите:"
 fi
 printf '\n  cd "%s" && %s -m scalpscan\n\n' "$REPO" "$PY"

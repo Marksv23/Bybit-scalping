@@ -6,7 +6,7 @@
 //| Read-only: this EA never places, modifies or closes orders.      |
 //+------------------------------------------------------------------+
 #property copyright "Bybit-scalping"
-#property version   "1.10"
+#property version   "1.20"
 
 input int    InpIntervalSec     = 15;    // Export interval, seconds
 input string InpNameContains    = "";    // Only symbols containing this text ("" = all)
@@ -18,24 +18,63 @@ input int    InpBarsM5          = 60;
 input int    InpBarsM15         = 60;
 input int    InpTickWindowSec   = 300;   // Window for tick rate / spread statistics
 input int    InpCalendarAheadH  = 24;    // Economic calendar look-ahead, hours
+input int    InpBudgetSec       = 8;     // Per-cycle time budget for bars/ticks; the rest reuse the last cycle
 
 const string DIR  = "scalpscan";
 const string TMP  = "scalpscan\\snapshot.tmp";
 const string DEST = "scalpscan\\snapshot.json";
 
 long g_offset = 0; // trade server time - UTC, seconds
+bool g_first  = true;
+int  g_next   = 0;  // rotation: where the next cycle starts refreshing bars/ticks
+uint g_start  = 0;  // GetTickCount() at the start of the current cycle
+
+// bars/ticks JSON from earlier cycles, so a slow symbol never blocks the snapshot
+string g_cache_sym[];
+string g_cache_heavy[];
+
+int CacheFind(string sym)
+  {
+   for(int i = 0; i < ArraySize(g_cache_sym); i++)
+      if(g_cache_sym[i] == sym)
+         return i;
+   return -1;
+  }
+
+void CachePut(string sym, string heavy)
+  {
+   int i = CacheFind(sym);
+   if(i < 0)
+     {
+      i = ArraySize(g_cache_sym);
+      ArrayResize(g_cache_sym, i + 1);
+      ArrayResize(g_cache_heavy, i + 1);
+      g_cache_sym[i] = sym;
+     }
+   g_cache_heavy[i] = heavy;
+  }
 
 //+------------------------------------------------------------------+
 int OnInit()
   {
    FolderCreate(DIR, FILE_COMMON);
-   EventSetTimer(MathMax(InpIntervalSec, 5));
-   Export();
+   EventSetTimer(2); // first export shortly after start, then every InpIntervalSec
+   Print("ScalpScanExporter: started, snapshot -> ", TerminalInfoString(TERMINAL_COMMONDATA_PATH),
+         "\\Files\\", DEST);
    return(INIT_SUCCEEDED);
   }
 
 void OnDeinit(const int reason) { EventKillTimer(); }
-void OnTimer() { Export(); }
+void OnTimer()
+  {
+   Export();
+   if(g_first)
+     {
+      g_first = false;
+      EventKillTimer();
+      EventSetTimer(MathMax(InpIntervalSec, 5));
+     }
+  }
 
 //--- JSON helpers ---------------------------------------------------
 string JS(string s)
@@ -140,7 +179,7 @@ string TickStatsJson(string sym, ulong last_msc)
   }
 
 //--- one symbol -------------------------------------------------------
-string SymbolJson(string sym)
+string SymbolJson(string sym, bool refresh)
   {
    int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
    double vmin = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
@@ -157,6 +196,25 @@ string SymbolJson(string sym)
       if(m > 0)
          margin = JD(m, 4);
      }
+
+   // Bars/ticks: refresh only while within the cycle's time budget, otherwise reuse the previous
+   // cycle's data. A request for history that is not loaded yet can block for tens of seconds, so
+   // the budget keeps one slow symbol from delaying the whole snapshot (it also starts the download).
+   string heavy = "";
+   int ci = CacheFind(sym);
+   bool in_budget = GetTickCount() - g_start < (uint)InpBudgetSec * 1000;
+   if(refresh && in_budget)
+     {
+      heavy = ",\"ticks\":" + (has_tick ? TickStatsJson(sym, t.time_msc) : "null")
+              + ",\"m1\":" + BarsJson(sym, PERIOD_M1, InpBarsM1, digits)
+              + ",\"m5\":" + BarsJson(sym, PERIOD_M5, InpBarsM5, digits)
+              + ",\"m15\":" + BarsJson(sym, PERIOD_M15, InpBarsM15, digits);
+      CachePut(sym, heavy);
+     }
+   else if(ci >= 0)
+      heavy = g_cache_heavy[ci];
+   else
+      heavy = ",\"ticks\":null,\"m1\":[],\"m5\":[],\"m15\":[]"; // history still loading
 
    string s = "{\"name\":" + JS(sym)
       + ",\"description\":" + JS(SymbolInfoString(sym, SYMBOL_DESCRIPTION))
@@ -182,10 +240,7 @@ string SymbolJson(string sym)
       + ",\"ask\":" + (has_tick ? JD(t.ask, digits) : "null")
       + ",\"quote_utc_ms\":" + (has_tick ? IntegerToString((long)t.time_msc - g_offset * 1000) : "null")
       + ",\"margin_min_lot\":" + margin
-      + ",\"ticks\":" + (has_tick ? TickStatsJson(sym, t.time_msc) : "null")
-      + ",\"m1\":" + BarsJson(sym, PERIOD_M1, InpBarsM1, digits)
-      + ",\"m5\":" + BarsJson(sym, PERIOD_M5, InpBarsM5, digits)
-      + ",\"m15\":" + BarsJson(sym, PERIOD_M15, InpBarsM15, digits)
+      + heavy
       + "}";
    return s;
   }
@@ -218,6 +273,7 @@ string CalendarJson()
 //--- main export ------------------------------------------------------
 void Export()
   {
+   g_start = GetTickCount();
    long off = (long)TimeTradeServer() - (long)TimeGMT();
    g_offset = (long)MathRound(off / 900.0) * 900;
 
@@ -227,7 +283,7 @@ void Export()
       Print("ScalpScanExporter: cannot open file, error ", GetLastError());
       return;
      }
-   FileWriteString(h, "{\"schema\":1,\"exporter\":\"ScalpScanExporter 1.10\""
+   FileWriteString(h, "{\"schema\":1,\"exporter\":\"ScalpScanExporter 1.20\""
       + ",\"generated_utc\":" + IntegerToString((long)TimeGMT())
       + ",\"server_offset_sec\":" + IntegerToString(g_offset)
       + ",\"tick_window_sec\":" + IntegerToString(InpTickWindowSec)
@@ -273,14 +329,31 @@ void Export()
          picked[n] = sym;
         }
      }
+   // Refresh bars/ticks starting at a rotating position so every symbol gets fresh data in turn.
+   int total_picked = MathMin(ArraySize(picked), InpMaxSymbols);
+   if(g_next >= total_picked)
+      g_next = 0;
+   string parts[];
+   ArrayResize(parts, total_picked);
+   int refreshed = 0;
+   for(int k = 0; k < total_picked; k++)
+     {
+      int i = (g_next + k) % total_picked;
+      bool before = GetTickCount() - g_start < (uint)InpBudgetSec * 1000;
+      parts[i] = SymbolJson(picked[i], true);
+      if(before)
+         refreshed++;
+     }
+   g_next = (g_next + refreshed) % MathMax(total_picked, 1);
    int written = 0;
-   for(int i = 0; i < ArraySize(picked) && written < InpMaxSymbols; i++)
-      FileWriteString(h, (written++ > 0 ? "," : "") + SymbolJson(picked[i]));
+   for(int i = 0; i < total_picked; i++)
+      FileWriteString(h, (written++ > 0 ? "," : "") + parts[i]);
    FileWriteString(h, "]}");
    FileClose(h);
 
    if(!FileMove(TMP, FILE_COMMON, DEST, FILE_COMMON | FILE_REWRITE))
       Print("ScalpScanExporter: cannot move snapshot, error ", GetLastError());
-   Comment("ScalpScanExporter: ", written, " symbols exported at ", TimeToString(TimeGMT(), TIME_SECONDS), " UTC");
+   Comment("ScalpScanExporter: ", written, " symbols exported at ", TimeToString(TimeGMT(), TIME_SECONDS),
+           " UTC (", (GetTickCount() - g_start) / 1000.0, " s)");
   }
 //+------------------------------------------------------------------+
