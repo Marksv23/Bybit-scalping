@@ -33,7 +33,7 @@ def snapshot(now=None, calendar=()):
     closed = dict(sym, name="GER40.s", path="Indices\\GER40.s", quote_utc_ms=(now - 7200) * 1000,
                   currency_profit="EUR", currency_base="EUR")
     return {
-        "schema": 1, "exporter": "ScalpScanExporter 1.00", "generated_utc": now, "server_offset_sec": 10800,
+        "schema": 1, "exporter": "ScalpScanExporter 1.10", "generated_utc": now, "server_offset_sec": 10800,
         "tick_window_sec": 300,
         "account": {"login": 1, "server": "Bybit-Live", "company": "Bybit", "currency": "USD",
                     "leverage": 500, "balance": 30.0, "free_margin": 30.0, "trade_mode": 0},

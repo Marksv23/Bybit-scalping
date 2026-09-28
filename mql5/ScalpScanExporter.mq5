@@ -6,12 +6,13 @@
 //| Read-only: this EA never places, modifies or closes orders.      |
 //+------------------------------------------------------------------+
 #property copyright "Bybit-scalping"
-#property version   "1.00"
+#property version   "1.10"
 
 input int    InpIntervalSec     = 15;    // Export interval, seconds
-input string InpNameContains    = "";    // Only symbols containing this text ("" = all, e.g. ".s")
+input string InpNameContains    = "";    // Only symbols containing this text ("" = all)
 input bool   InpOnlyMarketWatch = false; // Only symbols already in Market Watch
-input int    InpMaxSymbols      = 400;   // Safety cap on exported symbols
+input bool   InpIncludeStocks   = false; // Also stock CFDs outside Market Watch (Bybit has ~10k)
+input int    InpMaxSymbols      = 600;   // Safety cap on exported symbols
 input int    InpBarsM1          = 242;   // 1m bars (4h baseline + current)
 input int    InpBarsM5          = 60;
 input int    InpBarsM15         = 60;
@@ -55,6 +56,42 @@ string JD(double v, int digits = 10)
   }
 
 long ToUtc(long server_time) { return server_time - g_offset; }
+
+//--- universe: FX, metals, energy, indices, crypto; stocks only if in Market Watch ---
+const string CCY = "USD EUR GBP JPY CHF AUD NZD CAD SEK NOK DKK PLN HUF CZK TRY ZAR MXN SGD HKD CNH CNY";
+string NON_STOCK_PREFIXES[] = {
+   "XAU", "XAG", "XPT", "XPD", "USO", "UKO", "WTI", "BRENT", "OIL", "NGAS", "NATGAS", "COPPER",
+   "GOLD", "SILVER", "US30", "US500", "US100", "SP500", "SPX", "NAS", "NDX", "USTEC", "US2000",
+   "DJ30", "GER", "DE30", "DE40", "DAX", "EU50", "STOXX", "FRA", "F40", "CAC", "ESP", "SPA35",
+   "IT40", "NL25", "UK100", "FTSE", "JP225", "JPN225", "N225", "NIKKEI", "HK50", "HSI", "CHINA",
+   "CN50", "A50", "AUS200", "ASX", "SWI20", "SMI", "VIX", "DXY", "USDX",
+   "BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "LTC", "BNB", "DOT", "AVAX", "LINK"};
+
+bool IsNonStock(string sym)
+  {
+   string path = SymbolInfoString(sym, SYMBOL_PATH);
+   StringToLower(path);
+   if(StringFind(path, "stock") >= 0 || StringFind(path, "share") >= 0 || StringFind(path, "equit") >= 0)
+      return false;
+   if(StringFind(path, "forex") >= 0 || StringFind(path, "metal") >= 0 || StringFind(path, "commod") >= 0
+      || StringFind(path, "energ") >= 0 || StringFind(path, "indic") >= 0 || StringFind(path, "index") >= 0
+      || StringFind(path, "crypto") >= 0)
+      return true;
+   string name = sym;
+   StringToUpper(name);
+   for(int i = 0; i < ArraySize(NON_STOCK_PREFIXES); i++)
+      if(StringFind(name, NON_STOCK_PREFIXES[i]) == 0)
+         return true;
+   return StringLen(name) >= 6 && StringFind(CCY, StringSubstr(name, 0, 3)) >= 0
+          && StringFind(CCY, StringSubstr(name, 3, 3)) >= 0;
+  }
+
+bool Wanted(string sym)
+  {
+   if(InpNameContains != "" && StringFind(sym, InpNameContains) < 0)
+      return false;
+   return SymbolInfoInteger(sym, SYMBOL_TRADE_MODE) != SYMBOL_TRADE_MODE_DISABLED;
+  }
 
 //--- bars as [t_utc, o, h, l, c, tick_volume, spread_points] -----------
 string BarsJson(string sym, ENUM_TIMEFRAMES tf, int count, int digits)
@@ -190,7 +227,7 @@ void Export()
       Print("ScalpScanExporter: cannot open file, error ", GetLastError());
       return;
      }
-   FileWriteString(h, "{\"schema\":1,\"exporter\":\"ScalpScanExporter 1.00\""
+   FileWriteString(h, "{\"schema\":1,\"exporter\":\"ScalpScanExporter 1.10\""
       + ",\"generated_utc\":" + IntegerToString((long)TimeGMT())
       + ",\"server_offset_sec\":" + IntegerToString(g_offset)
       + ",\"tick_window_sec\":" + IntegerToString(InpTickWindowSec)
@@ -205,20 +242,40 @@ void Export()
       + ",\"calendar\":" + CalendarJson()
       + ",\"symbols\":[");
 
-   int total = SymbolsTotal(InpOnlyMarketWatch);
-   int written = 0;
-   for(int i = 0; i < total && written < InpMaxSymbols; i++)
+   // Pass 1: everything already in Market Watch (the user's own picks, stocks included).
+   string picked[];
+   int watch = SymbolsTotal(true);
+   for(int i = 0; i < watch; i++)
      {
-      string sym = SymbolName(i, InpOnlyMarketWatch);
-      if(InpNameContains != "" && StringFind(sym, InpNameContains) < 0)
-         continue;
-      if(SymbolInfoInteger(sym, SYMBOL_TRADE_MODE) == SYMBOL_TRADE_MODE_DISABLED)
-         continue;
-      // Symbols outside Market Watch do not receive live ticks, so keep them selected.
-      if(!SymbolInfoInteger(sym, SYMBOL_SELECT))
-         SymbolSelect(sym, true);
-      FileWriteString(h, (written++ > 0 ? "," : "") + SymbolJson(sym));
+      string sym = SymbolName(i, true);
+      if(Wanted(sym))
+        {
+         int n = ArraySize(picked);
+         ArrayResize(picked, n + 1);
+         picked[n] = sym;
+        }
      }
+   // Pass 2: the rest of the server's FX / metals / energy / indices / crypto (stocks on request).
+   // Symbols outside Market Watch receive no live ticks, so they are added to it.
+   if(!InpOnlyMarketWatch)
+     {
+      int total = SymbolsTotal(false);
+      for(int i = 0; i < total && ArraySize(picked) < InpMaxSymbols; i++)
+        {
+         string sym = SymbolName(i, false);
+         if(SymbolInfoInteger(sym, SYMBOL_SELECT) || !Wanted(sym))
+            continue;
+         if(!InpIncludeStocks && !IsNonStock(sym))
+            continue;
+         SymbolSelect(sym, true);
+         int n = ArraySize(picked);
+         ArrayResize(picked, n + 1);
+         picked[n] = sym;
+        }
+     }
+   int written = 0;
+   for(int i = 0; i < ArraySize(picked) && written < InpMaxSymbols; i++)
+      FileWriteString(h, (written++ > 0 ? "," : "") + SymbolJson(picked[i]));
    FileWriteString(h, "]}");
    FileClose(h);
 
