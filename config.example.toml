@@ -1,0 +1,44 @@
+# Скопируйте в config.toml и поправьте под себя. Все ключи необязательны.
+
+[account]
+deposit = 30.0
+risk_per_trade_pct = 2.0          # сколько % депозита готовы потерять на одном стопе
+# MT5 API НЕ отдаёт комиссию — укажите её вручную (за 1.0 лот за сторону, в валюте счёта).
+# Bybit CFD Zero-Fee -> 0. Проверьте в спецификации контракта вашего типа счёта.
+commission_per_lot_side = 0.0
+commission_overrides = { }        # например { "US500.s" = 0.5 }
+
+[mt5]
+# Пусто = подключиться к уже запущенному и авторизованному терминалу.
+mt5_path = ""                     # например 'C:\Program Files\Bybit MT5 Terminal\terminal64.exe'
+mt5_login = 0
+mt5_password = ""
+mt5_server = ""
+symbol_group = "*"                # фильтр символов MT5, например "*.s" для TradFi CFD Bybit
+exclude_symbols = []              # шаблоны fnmatch, например ["*.pro"]
+# server_utc_offset_hours = 3     # раскомментируйте, если автоопределение сдвига времени сервера не сработало
+
+[filters]
+max_quote_age_sec = 120
+margin_ok_pct = 15                # <= "подходит"
+margin_conditional_pct = 35       # <= "условно подходит", выше — исключается
+max_stop_atr5_pct = 20            # стоп 1×ATR(5m) на мин. лоте дороже этого % депозита — исключается
+max_cost_ratio_m1 = 1.0
+max_cost_ratio_m5 = 0.5
+max_spread_vs_median = 3.0
+min_tick_rate_per_min = 5
+
+[calendar]
+calendar_enabled = true
+event_lookahead_min = 30
+event_lookback_min = 10
+event_score_factor = 0.85
+
+[weights]                         # веса Scalping Efficiency Score (нормируются к 100)
+cost_m5 = 25
+cost_m1 = 15
+margin = 15
+risk_fit = 10
+activity = 15
+spread_stability = 10
+liquidity = 10
