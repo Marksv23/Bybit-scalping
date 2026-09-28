@@ -19,7 +19,20 @@
 **1. MetaTrader 5.** Установите MetaTrader 5 для macOS (ссылка есть в разделе TradFi/MT5 на Bybit, либо
 metatrader5.com). Войдите в свой Bybit CFD-аккаунт: логин, пароль и сервер MT5 указаны в кабинете Bybit TradFi.
 
-**2. Советник-экспортёр** (один раз):
+**2. Автоматическая настройка** (Python, копирование и компиляция советника):
+
+```bash
+git clone -b claude/bybit-cfd-scalping-tools-45vmre https://github.com/marksv23/bybit-scalping.git
+cd bybit-scalping
+bash scripts/mac_setup.sh --run
+```
+
+Скрипт находит Python 3.11+ (если его нет, предлагает `brew install python`), находит бутылку Wine от MT5,
+копирует советник в `MQL5/Experts`, компилирует его через MetaEditor и ждёт `snapshot.json`, чтобы сразу выполнить `SCAN`.
+Вам остаётся одно действие: перетащить **ScalpScanExporter** из Навигатора на любой график.
+Если автокомпиляция не сработала, скрипт скажет об этом; тогда выполните шаги ниже вручную.
+
+**2a. Советник вручную** (если скрипт не справился):
 1. В MT5: **Файл → Открыть каталог данных** (File → Open Data Folder). Откроется Finder.
 2. Скопируйте `mql5/ScalpScanExporter.mq5` из этого репозитория в папку `MQL5/Experts`.
 3. Откройте MetaEditor (**F4** или Сервис → Редактор MetaQuotes Language), откройте файл и нажмите
