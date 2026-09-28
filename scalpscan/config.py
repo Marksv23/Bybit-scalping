@@ -1,9 +1,48 @@
 """Settings with defaults; optionally overridden by a TOML file (see config.example.toml)."""
 from __future__ import annotations
 
-import tomllib
+import ast
+import re
 from dataclasses import dataclass, field, fields
 from pathlib import Path
+
+try:  # Python 3.11+
+    import tomllib as _toml
+except ImportError:  # macOS ships Python 3.9: use tomli if present, else the small parser below
+    try:
+        import tomli as _toml
+    except ImportError:
+        _toml = None
+
+
+def _strip_comment(line: str) -> str:
+    quote = None
+    for i, ch in enumerate(line):
+        if ch in "\"'" and quote in (None, ch):
+            quote = None if quote else ch
+        elif ch == "#" and quote is None:
+            return line[:i]
+    return line
+
+
+def parse_simple_toml(text: str) -> dict:
+    """Subset of TOML used by config.example.toml: [sections], key = number/string/bool/array/inline table."""
+    out: dict = {}
+    table = out
+    for raw in text.splitlines():
+        line = _strip_comment(raw).strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            table = out.setdefault(line[1:-1].strip(), {})
+            continue
+        key, _, value = line.partition("=")
+        value = value.strip()
+        if value.startswith("{"):  # inline table: { "A" = 1, B = 2 } -> {"A": 1, "B": 2}
+            value = re.sub(r'([{,]\s*)"?([^"=,{}\s]+)"?\s*=', r'\1"\2":', value)
+        value = re.sub(r"\btrue\b", "True", re.sub(r"\bfalse\b", "False", value))
+        table[key.strip()] = ast.literal_eval(value)
+    return out
 
 
 @dataclass
@@ -77,7 +116,8 @@ class Settings:
             if not default.exists():
                 return s
             path = default
-        data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+        text = Path(path).read_text(encoding="utf-8")
+        data = _toml.loads(text) if _toml else parse_simple_toml(text)
         flat: dict = {}
         for key, value in data.items():
             # allow [sections] purely for readability

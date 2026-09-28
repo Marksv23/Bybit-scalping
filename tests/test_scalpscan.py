@@ -163,3 +163,15 @@ def test_no_live_data_banner(s):
     res = Scanner(FakeProvider(u), s, clock=lambda: NOW).run("SCAN")
     out = render_scan(res, s)
     assert "LIVE DATA UNAVAILABLE" in out and not res.ranked
+
+
+def test_simple_toml_parser_matches_tomllib():
+    from pathlib import Path
+
+    tomllib = pytest.importorskip("tomllib")
+
+    from scalpscan.config import parse_simple_toml
+
+    text = Path("config.example.toml").read_text(encoding="utf-8")
+    text += '\n[extra]\ncommission_overrides = { "US500.s" = 0.5, XAUUSD = 1 }\nflag = false # c\n'
+    assert parse_simple_toml(text) == tomllib.loads(text)

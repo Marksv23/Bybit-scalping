@@ -1,6 +1,6 @@
 #!/bin/bash
 # macOS setup for scalpscan (bash 3.2 compatible — the macOS default shell).
-#   1. finds Python 3.11+ (offers to install via Homebrew),
+#   1. finds Python 3.9+ (offers to install via Homebrew),
 #   2. finds the MetaTrader 5 Wine bottle and copies ScalpScanExporter.mq5 into MQL5/Experts,
 #   3. tries to compile it with MetaEditor through the app's bundled Wine,
 #   4. with --run: waits for snapshot.json and runs SCAN.
@@ -20,15 +20,15 @@ warn() { printf '  ⚠ %s\n' "$*"; }
 ask()  { printf '  ? %s [y/N] ' "$*"; read -r a; [ "$a" = "y" ] || [ "$a" = "Y" ]; }
 
 # ---------- 1. Python ----------
-say "1/4 Python 3.11+"
+say "1/4 Python 3.9+"
 PY=""
-for c in python3.13 python3.12 python3.11 python3; do
-  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
+for c in python3.13 python3.12 python3.11 python3.10 python3 /usr/bin/python3; do
+  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then
     PY="$(command -v "$c")"; break
   fi
 done
 if [ -z "$PY" ]; then
-  warn "Python 3.11+ не найден."
+  warn "Python 3.9+ не найден."
   if command -v brew >/dev/null 2>&1 && ask "Установить python через Homebrew (brew install python)?"; then
     brew install python && PY="$(brew --prefix)/bin/python3"
   else

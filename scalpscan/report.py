@@ -189,7 +189,7 @@ def render_scan(res: ScanResult, s: Settings) -> str:
         out += [f"{i}. **{r.symbol}** — {why_now(r, f)}" for i, r in enumerate(top[:5], 1)]
         out.append("")
         best = next((r for r in ranked if r.margin_fit == "подходит" and not r.high_event_risk), top[0])
-        out += ["### BEST FOR $30", "",
+        out += [f"### BEST FOR ${s.deposit:g}", "",
                 f"**{best.symbol}** — Наиболее эффективный по заданным критериям прямо сейчас. "
                 f"Score {best.score.total:.0f}; round-trip {f.money(best.rt_cost)} = {pct(best.cost_ratio_m5)} "
                 f"5m-движения; маржа {f.money(best.margin)}; {num(best.tick_rate_per_min, 0)} тиков/мин.", ""]
