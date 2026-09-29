@@ -94,3 +94,14 @@ def test_missing_snapshot_is_clear_error(tmp_path, monkeypatch):
     monkeypatch.setattr(provider_file, "SEARCH_ROOTS", [tmp_path])
     with pytest.raises(ProviderError, match="ScalpScanExporter"):
         FileProvider(Settings()).connect()
+
+
+def test_disconnected_terminal_is_reported(snap):
+    doc = snapshot()
+    doc["connected"] = False
+    doc["account"].update(currency="", leverage=0, company="")
+    s = Settings(snapshot_path=str(snap(doc)), calendar_enabled=False)
+    p = FileProvider(s)
+    p.connect()
+    out = App(Scanner(p, s), s).execute(parse("SCAN"))
+    assert "MT5 не подключён к торговому серверу" in out

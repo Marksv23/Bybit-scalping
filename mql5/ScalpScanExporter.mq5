@@ -6,7 +6,7 @@
 //| Read-only: this EA never places, modifies or closes orders.      |
 //+------------------------------------------------------------------+
 #property copyright "Bybit-scalping"
-#property version   "1.20"
+#property version   "1.30"
 
 input int    InpIntervalSec     = 15;    // Export interval, seconds
 input string InpNameContains    = "";    // Only symbols containing this text ("" = all)
@@ -203,7 +203,7 @@ string SymbolJson(string sym, bool refresh)
    string heavy = "";
    int ci = CacheFind(sym);
    bool in_budget = GetTickCount() - g_start < (uint)InpBudgetSec * 1000;
-   if(refresh && in_budget)
+   if(refresh && in_budget && TerminalInfoInteger(TERMINAL_CONNECTED))
      {
       heavy = ",\"ticks\":" + (has_tick ? TickStatsJson(sym, t.time_msc) : "null")
               + ",\"m1\":" + BarsJson(sym, PERIOD_M1, InpBarsM1, digits)
@@ -274,6 +274,7 @@ string CalendarJson()
 void Export()
   {
    g_start = GetTickCount();
+   bool connected = (bool)TerminalInfoInteger(TERMINAL_CONNECTED);
    long off = (long)TimeTradeServer() - (long)TimeGMT();
    g_offset = (long)MathRound(off / 900.0) * 900;
 
@@ -283,7 +284,9 @@ void Export()
       Print("ScalpScanExporter: cannot open file, error ", GetLastError());
       return;
      }
-   FileWriteString(h, "{\"schema\":1,\"exporter\":\"ScalpScanExporter 1.20\""
+   FileWriteString(h, "{\"schema\":1,\"exporter\":\"ScalpScanExporter 1.30\""
+      + ",\"connected\":" + (connected ? "true" : "false")
+      + ",\"ping_ms\":" + IntegerToString(TerminalInfoInteger(TERMINAL_PING_LAST) / 1000)
       + ",\"generated_utc\":" + IntegerToString((long)TimeGMT())
       + ",\"server_offset_sec\":" + IntegerToString(g_offset)
       + ",\"tick_window_sec\":" + IntegerToString(InpTickWindowSec)
@@ -354,6 +357,9 @@ void Export()
    if(!FileMove(TMP, FILE_COMMON, DEST, FILE_COMMON | FILE_REWRITE))
       Print("ScalpScanExporter: cannot move snapshot, error ", GetLastError());
    Comment("ScalpScanExporter: ", written, " symbols exported at ", TimeToString(TimeGMT(), TIME_SECONDS),
-           " UTC (", (GetTickCount() - g_start) / 1000.0, " s)");
+           " UTC (", (GetTickCount() - g_start) / 1000.0, " s)",
+           connected ? "" : "\nMT5 NOT CONNECTED to the trade server - check login / server (bottom-right corner)");
+   if(!connected)
+      Print("ScalpScanExporter: terminal is not connected to the trade server - data is not live");
   }
 //+------------------------------------------------------------------+

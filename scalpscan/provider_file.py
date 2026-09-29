@@ -82,11 +82,17 @@ class FileProvider:
 
     @property
     def stale_note(self) -> str | None:
+        notes = []
+        acc = self.doc.get("account", {})
+        if self.doc.get("connected") is False or not acc.get("currency") or not acc.get("leverage"):
+            notes.append("MT5 не подключён к торговому серверу (нет данных счёта: валюта/плечо пустые). "
+                         "Посмотрите правый нижний угол MT5: «No connection» / «Invalid account» — "
+                         "войдите заново: File → Login to Trade Account (логин, пароль, сервер из кабинета Bybit)")
         age = self.file_age_sec
         if age > MAX_FILE_AGE_SEC:
-            return (f"snapshot обновлялся {age:.0f} с назад — советник ScalpScanExporter не работает "
-                    "или MT5 закрыт")
-        return None
+            notes.append(f"snapshot обновлялся {age:.0f} с назад — советник ScalpScanExporter не работает "
+                         "или MT5 закрыт")
+        return "; ".join(notes) or None
 
     @property
     def offset_hours(self) -> float:

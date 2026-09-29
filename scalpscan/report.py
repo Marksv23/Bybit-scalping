@@ -87,7 +87,7 @@ def header(res: ScanResult, s: Settings) -> list[str]:
         out.append(f"- Source: MetaTrader 5 live feed · {a.company} · server `{a.server}` · "
                    f"{a.mode} · account currency {a.currency} · leverage 1:{a.leverage} · "
                    f"server time UTC{res.server_utc_offset_hours:+g}h ({res.source})")
-        if a.currency != "USD":
+        if a.currency and a.currency != "USD":
             out.append(f"- ⚠ Валюта счёта {a.currency}: все денежные значения в {a.currency}, депозит "
                        f"из конфига ({s.deposit:g}) трактуется в той же валюте.")
     out.append(f"- Session: **{', '.join(res.active_sessions)}**")
